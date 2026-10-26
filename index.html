@@ -236,32 +236,104 @@ async function save(rec){
     return true;
   }catch(e){return false}
 }
-f.addEventListener("submit",async e=>{
+
+f.addEventListener("submit", async e => {
   e.preventDefault();
-  const err=$("#err");err.textContent="";
-  const d=new FormData(f);
-  const need=["name","email","phone","inst","course","year","role"];
-  for(const k of need){if(!String(d.get(k)||"").trim()){err.textContent="Please fill in all required fields in section 1.";f.elements[k].focus();return}}
-  if(!/^\S+@\S+\.\S+$/.test(d.get("email"))){err.textContent="Please enter a valid email address.";f.elements.email.focus();return}
-  if(String(d.get("role")).startsWith("Presenter")&&(!d.get("ptitle").trim()||!d.get("pdesc").trim())){err.textContent="Presenters need a project title and description.";f.elements.ptitle.focus();return}
-  if(!$("#consent").checked){err.textContent="Please tick the consent box to continue.";return}
-  const rec={ref:refCode(),at:new Date().toISOString(),needs:d.getAll("need").join(", ")};
-  for(const [k,v] of d.entries()){if(k!=="need")rec[k]=String(v).trim()}
-  $("#go").disabled=true;$("#go").textContent="Submitting…";
-  const stored=await save(rec);
-  f.style.display="none";
-  $("#ref").textContent=rec.ref;
-  const ok=$("#ok");ok.style.display="block";
-  if(stored){$("#okmsg").textContent="Your registration has been received. Keep your reference number and watch your email and phone for updates."}
-  else{
-    $("#okmsg").textContent="";$("#fb").style.display="block";
-    const lines=["Western Region PDC registration ("+rec.ref+")","Name: "+rec.name,"Email: "+rec.email,"Phone: "+rec.phone,"Institution: "+rec.inst,"Course: "+rec.course+", "+rec.year,"Reg no: "+(rec.regno||"-"),"Role: "+rec.role];
-    if(rec.ptitle)lines.push("Project: "+rec.ptitle,"Team: "+(rec.team||"-")+" ("+(rec.tsize||1)+")","Members: "+(rec.members||"-"),"Category: "+(rec.cat||"-")+" | Stage: "+(rec.stage||"-"),"Link: "+(rec.plink||"-"),"Problem: "+(rec.problem||"-"),"Description: "+rec.pdesc);
-    lines.push("Needs: "+(rec.needs||"-"),"T-shirt: "+(rec.shirt||"-"),"Notes: "+(rec.notes||"-"));
-    const msg=encodeURIComponent(lines.join("\n"));
-    $("#wa").href="https://wa.me/"+CFG.whatsapp.replace(/\D/g,"")+"?text="+msg;
-    $("#em").href="mailto:"+CFG.email+"?subject="+encodeURIComponent("PDC registration "+rec.ref)+"&body="+msg;
+
+  const err = $("#err");
+  err.textContent = "";
+
+  const d = new FormData(f);
+  const required = ["name", "email", "phone", "inst", "course", "year", "role"];
+
+  for (const k of required) {
+    if (!String(d.get(k) || "").trim()) {
+      err.textContent = "Please fill in all required fields in section 1.";
+      f.elements[k]?.focus();
+      return;
+    }
   }
+
+  const email = String(d.get("email") || "").trim();
+
+  if (!/^\S+@\S+\.\S+$/.test(email)) {
+    err.textContent = "Please enter a valid email address.";
+    f.elements.email?.focus();
+    return;
+  }
+
+  if (
+    String(d.get("role") || "").startsWith("Presenter") &&
+    (!String(d.get("ptitle") || "").trim() ||
+     !String(d.get("pdesc") || "").trim())
+  ) {
+    err.textContent = "Presenters need a project title and description.";
+    f.elements.ptitle?.focus();
+    return;
+  }
+
+  if (!$("#consent").checked) {
+    err.textContent = "Please tick the consent box to continue.";
+    return;
+  }
+
+  const payload = {};
+
+  for (const [key, value] of d.entries()) {
+    if (key === "need") {
+      if (!Array.isArray(payload.need)) payload.need = [];
+      payload.need.push(String(value).trim());
+    } else {
+      payload[key] = String(value).trim();
+    }
+  }
+
+  // The checkbox may not be included in FormData if it has no name.
+  payload.consent = $("#consent").checked;
+
+  const button = $("#go");
+  button.disabled = true;
+  button.textContent = "Submitting…";
+
+  try {
+    const response = await fetch(
+      "https://ncaobeyyufcsejckerkc.supabase.co/functions/v1/register-pdc",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload)
+      }
+    );
+
+    const result = await response.json();
+
+    if (!response.ok || !result.success) {
+      throw new Error(
+        result.error || "Registration failed. Please try again."
+      );
+    }
+
+    f.style.display = "none";
+    $("#ref").textContent = result.registration_ref;
+
+    $("#okmsg").textContent =
+      "Your registration has been received. Keep your reference number. " +
+      "Your payment status is pending; follow the organisers' M-Pesa payment instructions.";
+
+    $("#ok").style.display = "block";
+
+  } catch (error) {
+    console.error("Registration submission failed:", error);
+    err.textContent =
+      error.message ||
+      "We couldn't submit your registration. Please check your connection and try again.";
+  } finally {
+    button.disabled = false;
+    button.textContent = "Submit registration";
+  }
+});
   ok.focus();ok.scrollIntoView({behavior:"smooth",block:"start"});
 });
 </script>
